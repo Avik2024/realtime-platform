@@ -1,0 +1,183 @@
+version: "3.9"
+
+services:
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: kafka
+    restart: unless-stopped
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    networks:
+      - rt
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server kafka:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - rt
+
+  kafka-topic-creator:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka-topic-creator
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      set -e
+      echo 'Waiting for Kafka broker to be ready...'
+      while ! kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do
+        sleep 2
+      done
+
+      echo 'Creating Kafka topics...'
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic ${TEMP_TOPIC} --partitions 1 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic ${ALERT_TOPIC} --partitions 1 --replication-factor 1
+
+      echo 'Topics created successfully. Keeping container alive...'
+      tail -f /dev/null
+      "
+    networks:
+      - rt
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --describe --topic ${TEMP_TOPIC} >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: timescaledb
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./timescale-data:/var/lib/postgresql/data
+      - ./timescale-init:/docker-entrypoint-initdb.d
+    networks:
+      - rt
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # =============================
+  # 9. Grafana Visualization Service (NEW)
+  # =============================
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+    depends_on:
+      timescaledb:
+        condition: service_healthy # Depends on the healthy database
+    networks:
+      - rt
+
+  data-sink:
+    build: ./services/data_sink
+    container_name: data-sink
+    restart: unless-stopped
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=${ALERT_TOPIC}
+      - POSTGRES_HOST=timescaledb
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      kafka-topic-creator:
+        condition: service_healthy
+    networks:
+      - rt
+
+  producer:
+    build: ./services/producer
+    container_name: sensor-producer
+    restart: unless-stopped
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - TOPIC=${TEMP_TOPIC}
+      - PRODUCE_INTERVAL_SEC=1.0
+    depends_on:
+      kafka-topic-creator:
+        condition: service_healthy
+    networks:
+      - rt
+
+  consumer:
+    build: ./services/consumer
+    container_name: temp-consumer
+    restart: unless-stopped
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - INPUT_TOPIC=${TEMP_TOPIC}
+      - ALERT_TOPIC=${ALERT_TOPIC}
+      - TEMP_THRESHOLD_C=${TEMP_THRESHOLD_C}
+      - GROUP_ID=temp-processor
+    depends_on:
+      kafka-topic-creator:
+        condition: service_healthy
+    networks:
+      - rt
+
+  alert-listener:
+    build: ./services/alert_listener
+    container_name: alert-listener
+    restart: unless-stopped
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - ALERT_TOPIC=${ALERT_TOPIC}
+      - GROUP_ID=alert-listener
+    depends_on:
+      kafka-topic-creator:
+        condition: service_healthy
+    networks:
+      - rt
+
+networks:
+  rt:
+    driver: bridge
