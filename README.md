@@ -24,10 +24,10 @@ This system ingests sensor data, processes it, raises alerts, and visualizes res
 ![Grafana Dashboard](assets/grafana_dashboard.png)
 
 ### Database Metrics
-![Grafana Database](assets/grafana_database.png)
+![Grafana Database](assets/graphana_database.png)
 
 ### PostgreSQL Integration
-![Grafana PostgreSQL](assets/grafana_postgresql.png)
+![Grafana PostgreSQL](assets/graphana_postgresql.png)
 
 ---
 
@@ -42,3 +42,29 @@ This system ingests sensor data, processes it, raises alerts, and visualizes res
    ```bash
    git clone https://github.com/Avik2024/realtime-platform.git
    cd realtime-platform
+2. Start all services
+  ```bash
+  docker-compose up -d
+3. Access the services
+   ```bash
+   Grafana → http://localhost:3000
+
+Default login: admin / admin
+
+Add PostgreSQL (TimescaleDB) as a datasource
+
+Import dashboards from dashboards/
+
+TimescaleDB → localhost:5432
+
+Username: avik
+
+Password: rivupanda
+
+DB name: sensordb
+
+Kafka UI → http://localhost:8080
+
+View topics: sensor.temperatures, alerts.high-temp, etc.
+
+Inspect messages and consumer groups
