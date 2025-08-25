@@ -26,10 +26,6 @@ This system ingests sensor data, processes it, raises alerts, and visualizes res
 ### Database Metrics
 ![Grafana Database](assets/graphana_database.png)
 
-### PostgreSQL Integration
-![Grafana PostgreSQL](assets/graphana_postgresql.png)
-
----
 
 ## 🔌 Kafka UI
 ![Kafka UI](assets/kafkaUI.png)
