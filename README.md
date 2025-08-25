@@ -1,11 +1,44 @@
-# Real-time Distributed Data Processing & Analytics Platform
+# Real-time Data Platform 🚀
 
-This stack launches Kafka (single-node KRaft mode), a Python producer that streams random temperature data, a Python consumer that checks the temperature and emits alerts to a separate topic, and an alert listener that prints the alerts.
+A **real-time data processing and visualization platform** built with **Kafka, TimescaleDB, Grafana, and Docker**.  
+This system ingests sensor data, processes it, raises alerts, and visualizes results in Grafana dashboards.
 
-## Prerequisites
-- Docker & Docker Compose installed
+---
 
-## Quick Start
-```bash
-# from the repo root
-docker compose up --build
+## 📂 Architecture Overview
+![System Architecture](assets/database_connection.png)
+
+---
+
+## ⚙️ Tech Stack
+- **Apache Kafka** – Event streaming backbone
+- **TimescaleDB (PostgreSQL extension)** – Time-series database
+- **Grafana** – Interactive dashboards and alerting
+- **Docker Compose** – Service orchestration
+- **Python Microservices** – Data producer, consumer, sink, and alert listener
+
+---
+
+## 📊 Grafana Dashboards
+### Realtime Monitoring
+![Grafana Dashboard](assets/grafana_dashboard.png)
+
+### Database Metrics
+![Grafana Database](assets/grafana_database.png)
+
+### PostgreSQL Integration
+![Grafana PostgreSQL](assets/grafana_postgresql.png)
+
+---
+
+## 🔌 Kafka UI
+![Kafka UI](assets/kafkaUI.png)
+
+---
+
+## 🚀 How to Run
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Avik2024/realtime-platform.git
+   cd realtime-platform
